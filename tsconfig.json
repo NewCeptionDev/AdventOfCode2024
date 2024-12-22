@@ -1,10 +1,10 @@
 {
   "compilerOptions": {
-    "target": "es2019",
+    "target": "es2022",
     "moduleResolution": "Node",
     "allowJs": true,
     "strict": false,
-    "lib": ["dom", "es2019"]
+    "lib": ["dom", "es2022"]
   },
   "include": ["src", "examples/passThrough.ts"],
   "exclude": ["node_modules", "src/**/*.test.ts", "src/**/*.temp.ts"]
