@@ -15,7 +15,7 @@ enum Facing {
 
 interface Reindeer {
   facing: Facing
-  position: Position
+  positions: Position[]
 }
 
 const prepareInput = (rawInput: string) => rawInput
@@ -34,51 +34,47 @@ const findStartPosition = (maze: string[][]): Position => {
 }
 
 const getReindeerString = (reindeer: Reindeer): string =>
-  (reindeer.position.y * 100000 + reindeer.position.x * 100 + reindeer.facing).toString()
+  (
+    reindeer.positions[reindeer.positions.length - 1].y * 100000 +
+    reindeer.positions[reindeer.positions.length - 1].x * 100 +
+    reindeer.facing
+  ).toString()
 
 const moveForward = (maze: string[][], reindeer: Reindeer): Reindeer => {
+  const currentPosition = reindeer.positions[reindeer.positions.length - 1]
   switch (reindeer.facing) {
     case Facing.EAST:
       if (
-        maze[reindeer.position.y].length > reindeer.position.x + 1 &&
-        maze[reindeer.position.y][reindeer.position.x + 1] !== '#'
+        maze[currentPosition.y].length > currentPosition.x + 1 &&
+        maze[currentPosition.y][currentPosition.x + 1] !== '#'
       ) {
         return {
           facing: Facing.EAST,
-          position: { x: reindeer.position.x + 1, y: reindeer.position.y },
+          positions: [...reindeer.positions, { x: currentPosition.x + 1, y: currentPosition.y }],
         }
       }
       break
     case Facing.WEST:
-      if (
-        reindeer.position.x - 1 >= 0 &&
-        maze[reindeer.position.y][reindeer.position.x - 1] !== '#'
-      ) {
+      if (currentPosition.x - 1 >= 0 && maze[currentPosition.y][currentPosition.x - 1] !== '#') {
         return {
           facing: Facing.WEST,
-          position: { x: reindeer.position.x - 1, y: reindeer.position.y },
+          positions: [...reindeer.positions, { x: currentPosition.x - 1, y: currentPosition.y }],
         }
       }
       break
     case Facing.NORTH:
-      if (
-        reindeer.position.y - 1 >= 0 &&
-        maze[reindeer.position.y - 1][reindeer.position.x] !== '#'
-      ) {
+      if (currentPosition.y - 1 >= 0 && maze[currentPosition.y - 1][currentPosition.x] !== '#') {
         return {
           facing: Facing.NORTH,
-          position: { x: reindeer.position.x, y: reindeer.position.y - 1 },
+          positions: [...reindeer.positions, { x: currentPosition.x, y: currentPosition.y - 1 }],
         }
       }
       break
     case Facing.SOUTH:
-      if (
-        maze[reindeer.position.y + 1] &&
-        maze[reindeer.position.y + 1][reindeer.position.x] !== '#'
-      ) {
+      if (maze[currentPosition.y + 1] && maze[currentPosition.y + 1][currentPosition.x] !== '#') {
         return {
           facing: Facing.SOUTH,
-          position: { x: reindeer.position.x, y: reindeer.position.y + 1 },
+          positions: [...reindeer.positions, { x: currentPosition.x, y: currentPosition.y + 1 }],
         }
       }
       break
@@ -113,17 +109,17 @@ const getNextPossibleSteps = (maze: string[][], reindeer: Reindeer): Reindeer[] 
   getAdjacentFacings(reindeer.facing).forEach((facing) => {
     nextSteps.push({
       facing,
-      position: { x: reindeer.position.x, y: reindeer.position.y },
+      positions: [...reindeer.positions],
     })
   })
   return nextSteps
 }
-
-const findShortestWay = (maze: string[][]): number => {
+const findShortestWays = (maze: string[][]): { ways: Position[][]; cost: number } => {
   const startPosition = findStartPosition(maze)
-  const startReindeer = { facing: Facing.EAST, position: startPosition }
+  const startReindeer = { facing: Facing.EAST, positions: [startPosition] }
   const visited: Map<string, number> = new Map()
-  let lowestEnd: number = Number.MAX_SAFE_INTEGER
+  let shortestWays: Position[][] = []
+  let lowestCosts = Number.MAX_SAFE_INTEGER
 
   visited.set(getReindeerString(startReindeer), 0)
   const queue: Reindeer[] = [startReindeer]
@@ -135,14 +131,18 @@ const findShortestWay = (maze: string[][]): number => {
 
     nextSteps.forEach((nextStep) => {
       const newCosts = costs + (nextStep.facing === reindeer.facing ? 1 : 1000)
+      const nextPosition = nextStep.positions[nextStep.positions.length - 1]
 
-      if (maze[nextStep.position.y][nextStep.position.x] === 'E') {
-        if (newCosts < lowestEnd) {
-          lowestEnd = newCosts
+      if (maze[nextPosition.y][nextPosition.x] === 'E') {
+        if (newCosts < lowestCosts) {
+          lowestCosts = newCosts
+          shortestWays = [nextStep.positions]
+        } else if (newCosts === lowestCosts) {
+          shortestWays.push(nextStep.positions)
         }
       } else {
         const nextString = getReindeerString(nextStep)
-        if (!visited.has(nextString) || visited.get(nextString) > newCosts) {
+        if (!visited.has(nextString) || visited.get(nextString) >= newCosts) {
           visited.set(nextString, newCosts)
           queue.push(nextStep)
         }
@@ -150,90 +150,27 @@ const findShortestWay = (maze: string[][]): number => {
     })
   }
 
-  return lowestEnd
-}
-
-const findAllTilesInTheShortestWays = (maze: string[][]): Position[] => {
-  const startPosition = findStartPosition(maze)
-  const startReindeer = { facing: Facing.EAST, position: startPosition }
-  const visited: Map<string, { cost: number; way: Position[] }> = new Map()
-  let lowestEnd: number = Number.MAX_SAFE_INTEGER
-  let tilesOnShortestWay: Position[] = []
-
-  visited.set(getReindeerString(startReindeer), { cost: 0, way: [startPosition] })
-  const queue: Reindeer[] = [startReindeer]
-
-  while (queue.length > 0) {
-    console.log(queue.length)
-    const reindeer = queue.pop()
-    const visitedInformation = visited.get(getReindeerString(reindeer))
-    const nextSteps = getNextPossibleSteps(maze, reindeer)
-
-    nextSteps.forEach((nextStep) => {
-      const newCosts = visitedInformation.cost + (nextStep.facing === reindeer.facing ? 1 : 1000)
-      let updatedWay = []
-      if (nextStep.facing === reindeer.facing) {
-        updatedWay = [...visitedInformation.way, nextStep.position]
-      } else {
-        updatedWay = visitedInformation.way
-      }
-
-      if (maze[nextStep.position.y][nextStep.position.x] === 'E') {
-        if (newCosts < lowestEnd) {
-          lowestEnd = newCosts
-          tilesOnShortestWay = updatedWay
-        } else if (newCosts === lowestEnd) {
-          tilesOnShortestWay.push(
-            ...updatedWay.filter(
-              (position) =>
-                !tilesOnShortestWay.find((tile) => tile.x === position.x && tile.y === position.y),
-            ),
-          )
-        }
-      } else {
-        const nextString = getReindeerString(nextStep)
-        if (!visited.has(nextString) || visited.get(nextString).cost > newCosts) {
-          visited.set(nextString, { cost: newCosts, way: updatedWay })
-          if (lowestEnd === Number.MAX_SAFE_INTEGER || newCosts < lowestEnd) {
-            queue.push(nextStep)
-          }
-        } else if (visited.get(nextString).cost === newCosts) {
-          const combinedWay = [
-            ...visited.get(nextString).way,
-            ...updatedWay.filter(
-              (position) =>
-                !visited
-                  .get(nextString)
-                  .way.find((tile) => tile.x === position.x && tile.y === position.y),
-            ),
-          ]
-          if (combinedWay.length > visited.get(nextString).way.length) {
-            if (lowestEnd === Number.MAX_SAFE_INTEGER || newCosts < lowestEnd) {
-              queue.push(nextStep)
-            }
-          }
-          visited.set(nextString, {
-            cost: newCosts,
-            way: combinedWay,
-          })
-        }
-      }
-    })
-  }
-
-  return tilesOnShortestWay
+  return { ways: shortestWays, cost: lowestCosts }
 }
 
 const goA = (input) => {
   const maze = splitToLines(input).map((line) => line.split(''))
 
-  return findShortestWay(maze)
+  return findShortestWays(maze).cost
 }
 
 const goB = (input) => {
   const maze = splitToLines(input).map((line) => line.split(''))
+  const shortestWays = findShortestWays(maze)
 
-  return findAllTilesInTheShortestWays(maze).length
+  const uniqueTiles = new Set()
+  shortestWays.ways.forEach((way) => {
+    way.forEach((position) => {
+      uniqueTiles.add(position.x + ',' + position.y)
+    })
+  })
+
+  return uniqueTiles.size
 }
 
 /* Tests */

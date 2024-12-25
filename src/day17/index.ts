@@ -1,11 +1,10 @@
-import { fail } from 'assert'
 import { readInput, test } from '../utils/index'
 import { readInputFromSpecialFile, readTestFile, splitToLines } from '../utils/readInput'
 
 interface Computer {
-  registerA: number
-  registerB: number
-  registerC: number
+  registerA: bigint
+  registerB: bigint
+  registerC: bigint
   instructions: number[]
 }
 
@@ -13,8 +12,8 @@ const prepareInput = (rawInput: string) => rawInput
 
 const taskInput = prepareInput(readInput())
 
-const parseRegister = (line: string): number => {
-  return Number.parseInt(line.split(': ')[1], 10)
+const parseRegister = (line: string): bigint => {
+  return BigInt(line.split(': ')[1])
 }
 
 const parseInstructions = (line: string): number[] => {
@@ -33,9 +32,9 @@ const parseComputer = (lines: string[]): Computer => {
   }
 }
 
-const getComboOperator = (computer: Computer, operator: number): number => {
+const getComboOperator = (computer: Computer, operator: number): bigint => {
   if (operator < 4) {
-    return operator
+    return BigInt(operator)
   } else if (operator === 4) {
     return computer.registerA
   } else if (operator === 5) {
@@ -50,10 +49,9 @@ const applyAdvInstruction = (
   computer: Computer,
   instructionIndex: number,
 ): { computer: Computer; newInstructionIndex: number } => {
-  computer.registerA = Math.floor(
+  computer.registerA =
     computer.registerA /
-      Math.pow(2, getComboOperator(computer, computer.instructions[instructionIndex + 1])),
-  )
+    2n ** getComboOperator(computer, computer.instructions[instructionIndex + 1])
 
   return { computer, newInstructionIndex: instructionIndex + 2 }
 }
@@ -62,7 +60,7 @@ const applyBxlInstruction = (
   computer: Computer,
   instructionIndex: number,
 ): { computer: Computer; newInstructionIndex: number } => {
-  computer.registerB = computer.registerB ^ computer.instructions[instructionIndex + 1]
+  computer.registerB = computer.registerB ^ BigInt(computer.instructions[instructionIndex + 1])
 
   return { computer, newInstructionIndex: instructionIndex + 2 }
 }
@@ -71,7 +69,7 @@ const applyBstInstruction = (
   computer: Computer,
   instructionIndex: number,
 ): { computer: Computer; newInstructionIndex: number } => {
-  computer.registerB = getComboOperator(computer, computer.instructions[instructionIndex + 1]) % 8
+  computer.registerB = getComboOperator(computer, computer.instructions[instructionIndex + 1]) % 8n
 
   return { computer, newInstructionIndex: instructionIndex + 2 }
 }
@@ -80,7 +78,7 @@ const applyJnzInstruction = (
   computer: Computer,
   instructionIndex: number,
 ): { computer: Computer; newInstructionIndex: number } => {
-  if (computer.registerA === 0) {
+  if (computer.registerA === 0n) {
     return { computer, newInstructionIndex: instructionIndex + 2 }
   }
   return { computer, newInstructionIndex: computer.instructions[instructionIndex + 1] }
@@ -99,10 +97,9 @@ const applyBdvInstruction = (
   computer: Computer,
   instructionIndex: number,
 ): { computer: Computer; newInstructionIndex: number } => {
-  computer.registerB = Math.floor(
+  computer.registerB =
     computer.registerA /
-      Math.pow(2, getComboOperator(computer, computer.instructions[instructionIndex + 1])),
-  )
+    2n ** getComboOperator(computer, computer.instructions[instructionIndex + 1])
 
   return { computer, newInstructionIndex: instructionIndex + 2 }
 }
@@ -111,16 +108,15 @@ const applyCdvInstruction = (
   computer: Computer,
   instructionIndex: number,
 ): { computer: Computer; newInstructionIndex: number } => {
-  computer.registerC = Math.floor(
+  computer.registerC =
     computer.registerA /
-      Math.pow(2, getComboOperator(computer, computer.instructions[instructionIndex + 1])),
-  )
+    2n ** getComboOperator(computer, computer.instructions[instructionIndex + 1])
 
   return { computer, newInstructionIndex: instructionIndex + 2 }
 }
 
 const getComputerOutput = (computer: Computer, compareOutput: boolean): string => {
-  const outputs: number[] = []
+  const outputs: bigint[] = []
   let currentIndex = 0
   let computerHalts = false
   while (!computerHalts) {
@@ -159,13 +155,9 @@ const getComputerOutput = (computer: Computer, compareOutput: boolean): string =
         computer = op4Result.computer
         break
       case 5:
-        const newOutput = getComboOperator(computer, computer.instructions[currentIndex + 1]) % 8
-        if (
-          compareOutput &&
-          computer.instructions.length < outputs.length &&
-          computer.instructions[outputs.length] !== newOutput
-        ) {
-          return undefined
+        const newOutput = getComboOperator(computer, computer.instructions[currentIndex + 1]) % 8n
+        if (newOutput < 0) {
+          console.log('output', newOutput, computer)
         }
         outputs.push(newOutput)
         currentIndex += 2
@@ -191,39 +183,45 @@ const goA = (input) => {
   return getComputerOutput(computer, false)
 }
 
+const find = (a: bigint, i: number, computer: Computer) => {
+  computer.registerA = a
+  const result = getComputerOutput(computer, false)
+  if (result === computer.instructions.join(',')) {
+    return a
+  } else if (
+    result === computer.instructions.slice(computer.instructions.length - i).join(',') ||
+    i === 0
+  ) {
+    let overallResult: bigint
+    for (let j = 0; j < 8 && !overallResult; j++) {
+      const result = find(8n * a + BigInt(j), i + 1, computer)
+      if (result) {
+        overallResult = result
+      }
+    }
+
+    return overallResult
+  }
+}
+
 const goB = (input) => {
   const computer = parseComputer(splitToLines(input))
-  let currentA = 0
-  let foundCopyOfProgram = false
-  while (!foundCopyOfProgram) {
-    if (currentA % 1000000 === 0) {
-      console.log(currentA)
-    }
-    computer.registerA = currentA
-    const output = getComputerOutput(computer, true)
-    if (output === computer.instructions.join(',')) {
-      foundCopyOfProgram = true
-    } else {
-      currentA++
-    }
-  }
-
-  return currentA
+  return find(0n, 0, computer)
 }
 
 /* Tests */
 
 test(
-  applyBstInstruction({ registerA: 0, registerB: 0, registerC: 9, instructions: [2, 6] }, 0)
+  applyBstInstruction({ registerA: 0n, registerB: 0n, registerC: 9n, instructions: [2, 6] }, 0)
     .computer.registerB,
-  1,
+  1n,
 )
 test(
   getComputerOutput(
     {
-      registerA: 10,
-      registerB: 0,
-      registerC: 0,
+      registerA: 10n,
+      registerB: 0n,
+      registerC: 0n,
       instructions: [5, 0, 5, 1, 5, 4],
     },
     false,
@@ -233,9 +231,9 @@ test(
 test(
   getComputerOutput(
     {
-      registerA: 2024,
-      registerB: 0,
-      registerC: 0,
+      registerA: 2024n,
+      registerB: 0n,
+      registerC: 0n,
       instructions: [0, 1, 5, 4, 3, 0],
     },
     false,
@@ -243,17 +241,19 @@ test(
   '4,2,5,6,7,7,7,7,3,1,0',
 )
 test(
-  applyBxlInstruction({ registerA: 0, registerB: 29, registerC: 9, instructions: [1, 7] }, 0)
+  applyBxlInstruction({ registerA: 0n, registerB: 29n, registerC: 9n, instructions: [1, 7] }, 0)
     .computer.registerB,
-  26,
+  26n,
 )
 test(
-  applyBxcInstruction({ registerA: 0, registerB: 2024, registerC: 43690, instructions: [4, 0] }, 0)
-    .computer.registerB,
-  44354,
+  applyBxcInstruction(
+    { registerA: 0n, registerB: 2024n, registerC: 43690n, instructions: [4, 0] },
+    0,
+  ).computer.registerB,
+  44354n,
 )
 test(goA(readTestFile()), '4,6,3,5,6,3,5,2,1,0')
-test(goB(readInputFromSpecialFile('testInput2.txt')), 117440)
+test(goB(readInputFromSpecialFile('testInput2.txt')), 117440n)
 
 /* Results */
 
